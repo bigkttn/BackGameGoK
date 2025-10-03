@@ -43,12 +43,11 @@ func main() {
 	fmt.Println("✅ Connected to database successfully")
 
 	// สร้าง API endpoint
-	http.HandleFunc("/user", getUsers)
-	// เพิ่ม handler สำหรับ register
-	http.HandleFunc("/register", registerUser)
-	// เพิ่ม handler สำหรับ login
-	http.HandleFunc("/login", loginUser)
-	http.HandleFunc("/hello", helloHandler)
+	// สร้าง API endpoint
+	http.HandleFunc("/user", withCORS(getUsers))
+	http.HandleFunc("/register", withCORS(registerUser))
+	http.HandleFunc("/login", withCORS(loginUser))
+	http.HandleFunc("/hello", withCORS(helloHandler))
 
 	// หา IP ของเครื่อง
 	ip := getLocalIP()
@@ -240,4 +239,30 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Hello GameShop!",
 	})
+}
+
+// ใส่ไว้บนๆ ของไฟล์
+func withCORS(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// อนุญาตต้นทางจาก Angular dev server
+		if origin == "http://localhost:4200" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			// ถ้าจะใช้ cookie/credentials ให้เปิดบรรทัดนี้และอย่าใช้ "*" เป็น origin
+			// w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// ตอบ preflight ทันที
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent) // 204
+			return
+		}
+
+		h.ServeHTTP(w, r)
+	}
 }
