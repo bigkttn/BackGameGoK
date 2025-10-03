@@ -132,7 +132,7 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 	// รับ JSON body
 	var u struct {
 		UID      string `json:"uid"`
-		FullName string `json:"full_name"`
+		Username string `json:"username"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 		Role     string `json:"role"`
@@ -161,17 +161,16 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// INSERT ลงฐานข้อมูล
-	stmt, err := db.Prepare("INSERT INTO user (uid, username, email, password, role) VALUES (?, ?, ?, ?, ?)")
+	// INSERT ลงฐานข้อมูล โดยให้ MySQL สร้าง uid อัตโนมัติ
+	stmt, err := db.Prepare("INSERT INTO user (username, email, password, role) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(u.UID, u.FullName, u.Email, string(hashedPassword), u.Role)
+	_, err = stmt.Exec(u.Username, u.Email, string(hashedPassword), u.Role)
 	if err != nil {
-		// ตรวจสอบ UNIQUE constraint
 		if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1062 {
 			http.Error(w, "Email already exists", http.StatusBadRequest)
 			return
