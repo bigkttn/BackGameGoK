@@ -17,10 +17,10 @@ import (
 
 // กำหนดโครงสร้างข้อมูล user (ตรงกับ table user ของคุณ)
 type User struct {
-	UID      string `json:"uid"` // เปลี่ยนจาก int เป็น string
+	UID      string `json:"uid"`
 	FullName string `json:"full_name"`
 	Email    string `json:"email"`
-	Password string `json:"password"` // ถ้าตารางไม่มี Phone ให้ใช้ placeholder หรือเลือกคอลัมน์อื่น
+	Password string `json:"password"`
 	Role     string `json:"role"`
 }
 
@@ -64,8 +64,7 @@ func main() {
 
 // handler ดึงข้อมูล user ทั้งหมด
 func getUsers(w http.ResponseWriter, r *http.Request) {
-	// เลือกเฉพาะคอลัมน์ที่ตรงกับ struct
-	rows, err := db.Query("SELECT uid, username AS full_name, email, '' AS phone, role FROM user")
+	rows, err := db.Query("SELECT uid, username AS full_name, email, password, role FROM user")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
