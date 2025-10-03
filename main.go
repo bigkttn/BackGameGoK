@@ -42,6 +42,8 @@ func main() {
 
 	// สร้าง API endpoint
 	http.HandleFunc("/user", getUsers)
+	// เพิ่ม handler สำหรับ register
+	http.HandleFunc("/register", registerUser)
 
 	// หา IP ของเครื่อง
 	ip := getLocalIP()
@@ -115,4 +117,44 @@ func openBrowser(url string) {
 	}
 
 	exec.Command(cmd, args...).Start()
+}
+
+// handler ลงทะเบียนผู้ใช้ใหม่
+func registerUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// รับข้อมูล JSON จาก body
+	var u struct {
+		UID      string `json:"uid"`
+		FullName string `json:"full_name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// INSERT ลงฐานข้อมูล
+	stmt, err := db.Prepare("INSERT INTO user (uid, username, email, password, role) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(u.UID, u.FullName, u.Email, u.Password, u.Role)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "User registered successfully",
+	})
 }
