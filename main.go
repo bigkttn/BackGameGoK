@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"runtime"
 
+	"github.com/go-sql-driver/mysql"
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // กำหนดโครงสร้างข้อมูล user (ตรงกับ table user ของคุณ)
@@ -44,6 +46,8 @@ func main() {
 	http.HandleFunc("/user", getUsers)
 	// เพิ่ม handler สำหรับ register
 	http.HandleFunc("/register", registerUser)
+	// เพิ่ม handler สำหรับ login
+	http.HandleFunc("/login", loginUser)
 
 	// หา IP ของเครื่อง
 	ip := getLocalIP()
@@ -126,7 +130,7 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// รับข้อมูล JSON จาก body
+	// รับ JSON body
 	var u struct {
 		UID      string `json:"uid"`
 		FullName string `json:"full_name"`
@@ -139,6 +143,25 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// ตรวจสอบ email ซ้ำ
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM user WHERE email = ?", u.Email).Scan(&exists)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if exists > 0 {
+		http.Error(w, "Email already exists", http.StatusBadRequest)
+		return
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	// INSERT ลงฐานข้อมูล
 	stmt, err := db.Prepare("INSERT INTO user (uid, username, email, password, role) VALUES (?, ?, ?, ?, ?)")
 	if err != nil {
@@ -147,8 +170,13 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(u.UID, u.FullName, u.Email, u.Password, u.Role)
+	_, err = stmt.Exec(u.UID, u.FullName, u.Email, string(hashedPassword), u.Role)
 	if err != nil {
+		// ตรวจสอบ UNIQUE constraint
+		if mysqlErr, ok := err.(*mysql.MySQLError); ok && mysqlErr.Number == 1062 {
+			http.Error(w, "Email already exists", http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -156,5 +184,53 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "User registered successfully",
+	})
+}
+
+// handler สำหรับ login
+func loginUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// รับ JSON body
+	var input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// ดึง user จาก DB ตาม email
+	var hashedPassword string
+	var uid, fullName, role string
+	err := db.QueryRow("SELECT uid, username, password, role FROM user WHERE email = ?", input.Email).Scan(&uid, &fullName, &hashedPassword, &role)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Email not found", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// ตรวจสอบ password
+	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(input.Password))
+	if err != nil {
+		http.Error(w, "Incorrect password", http.StatusUnauthorized)
+		return
+	}
+
+	// Login สำเร็จ
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":   "Login successful",
+		"uid":       uid,
+		"full_name": fullName,
+		"email":     input.Email,
+		"role":      role,
 	})
 }
