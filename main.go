@@ -20,7 +20,7 @@ type User struct {
 	UID      string `json:"uid"` // เปลี่ยนจาก int เป็น string
 	FullName string `json:"full_name"`
 	Email    string `json:"email"`
-	Phone    string `json:"phone"` // ถ้าตารางไม่มี Phone ให้ใช้ placeholder หรือเลือกคอลัมน์อื่น
+	Password string `json:"password"` // ถ้าตารางไม่มี Phone ให้ใช้ placeholder หรือเลือกคอลัมน์อื่น
 	Role     string `json:"role"`
 }
 
@@ -48,6 +48,7 @@ func main() {
 	http.HandleFunc("/register", registerUser)
 	// เพิ่ม handler สำหรับ login
 	http.HandleFunc("/login", loginUser)
+	http.HandleFunc("/hello", helloHandler)
 
 	// หา IP ของเครื่อง
 	ip := getLocalIP()
@@ -74,7 +75,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.UID, &u.FullName, &u.Email, &u.Phone, &u.Role); err != nil {
+		if err := rows.Scan(&u.UID, &u.FullName, &u.Email, &u.Password, &u.Role); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -232,5 +233,12 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 		"full_name": fullName,
 		"email":     input.Email,
 		"role":      role,
+	})
+
+}
+func helloHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Hello GameShop!",
 	})
 }
